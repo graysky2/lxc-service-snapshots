@@ -1,0 +1,22 @@
+## general
+# change 'armv7l' to whatever arch you're running: x86_64, aarch64, etc.
+lxc.arch = armv7l
+# change the lxc.include to match the containerized distro
+lxc.include = /usr/share/lxc/config/archlinux.common.conf
+lxc.uts.name = base
+lxc.rootfs.path = /var/lib/lxc/base/rootfs
+
+## network
+lxc.net.0.type = veth
+lxc.net.0.link = br0
+lxc.net.0.flags = up
+lxc.net.0.name = eth0
+lxc.net.0.hwaddr = ea:cc:af:e1:21:77
+
+# TODO support static IP addresses
+#lxc.net.0.ipv4 = 10.1.10.250/24
+#lxc.net.0.ipv4.gateway = 10.1.10.1
+
+## mounts
+# recommended to share pacman pkg cache if host and lxc are the same arch
+lxc.mount.entry = /var/cache/pacman/pkg var/cache/pacman/pkg none bind 0 0

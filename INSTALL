@@ -1,0 +1,17 @@
+DEPENDENCIES
+ bash >=4.0
+ lxc >=2.1.0
+ systemd
+
+BUILDING
+ Setup the via a make.
+
+ $ make
+
+ Running a `make install` as root will distribute the files to the filesystem.
+
+ # make install
+
+USE A DISTRO PROVIDED PACKAGE
+ See the project homepage for an updated list of provided packages:
+ https://github.com/graysky2/lxc-service-snapshots

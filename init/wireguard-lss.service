@@ -1,0 +1,13 @@
+[Unit]
+Description=WireGuard LXC service snapshot
+After=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/lxc-service-snapshots/wireguard u
+ExecStop=/usr/lib/lxc-service-snapshots/wireguard d
+Delegate=yes
+
+[Install]
+WantedBy=multi-user.target

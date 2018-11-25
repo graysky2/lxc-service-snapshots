@@ -1,0 +1,184 @@
+#!/bin/bash
+# pihole-lss by graysky
+# version @VERSION@
+
+setupcheck() {
+  CONFIG=/etc/conf.d/pihole-lss.conf
+
+  if [[ -f "$CONFIG" ]]; then
+    . "$CONFIG"
+  else
+    echo "$CONFIG not found so exiting!"
+    exit 1
+  fi
+
+  # setup global vars
+  LXCPREFIX="/var/lib/lxc"
+  BASEPATH="$LXCPREFIX/$BASE/rootfs"
+  LXCPATH="$LXCPREFIX/$LXC"
+
+  # make sure there is a config for the base lxc
+  [[ -f $LXCPREFIX/$BASE/config ]] || {
+    echo "Cannot locate the base LXC config file."
+  echo "Copy the template from /usr/share/lxc-service-snapshots and try again."
+  exit 1; }
+
+  # read in the MAC from the base lxc
+  BASELASTBLOCK=$(grep -o -i '[0-9A-F]\{2\}\(:[0-9A-F]\{2\}\)\{5\}' "$LXCPREFIX/$BASE/config" | awk -F: '{print $6}')
+
+  # TODO check that the user defined a valid MAC address in the base config
+
+  # make sure $LASTMACBLOCK is hexadecimal
+  if ! echo "$LASTMACBLOCK" | grep -o -i '[0-9A-F]\{2\}' &>/dev/null; then
+    echo "Bad value for LASTMACBLOCK so exiting: $LASTMACBLOCK"
+    exit 1
+  fi
+
+  # TODO check the SERVICES array against what is in the base image
+}
+
+config() {
+  # change hwaddr on the base image for consistent dhcp behavior
+  sed -i -e "/^lxc.net.0.hwaddr/ s,$BASELASTBLOCK,$LASTMACBLOCK," "$LXCPATH/config"
+
+  # remove mounts since the base image gets updated not the snapshot
+  sed -i -e '/^lxc.mount.entry/ s,lxc,#lxc,g' "$LXCPATH/config"
+
+  # enable services in delta0 space
+  mkdir -p "$LXCPATH/delta0/etc/systemd/system/multi-user.target.wants"
+  for UNIT in "${SERVICES[@]}"; do
+    ln -s /usr/lib/systemd/system/"$UNIT".service \
+      "$LXCPATH/delta0/etc/systemd/system/multi-user.target.wants/$UNIT.service"
+  done
+
+  # add delay for pihole-FTL.service in delta0 space so it does not coredump
+  # see comment block in the section below for a discussion and rationale
+  mkdir -p "$LXCPATH/delta0/usr/lib/systemd/system"
+  cp -a "$BASEPATH/usr/lib/systemd/system/pihole-FTL.service" "$LXCPATH/delta0/usr/lib/systemd/system/pihole-FTL.service"
+  sed -i '/ExecStart=/ a ExecStartPre=/bin/sleep 15' "$LXCPATH/delta0/usr/lib/systemd/system/pihole-FTL.service"
+}
+
+restorelog() {
+  sleep 5s
+  if cat /var/lib/lxc/pihole.log.save >> "/proc/$PID1/root/run/log/pihole/pihole.log"; then
+    rm /var/lib/lxc/pihole.log.save
+  else
+    exit 1
+  fi
+  exit 0
+}
+
+stopit() {
+  # get pid1 of the container to save pihole.log then copy it to media
+  # so the next time it boots up it is read
+  PID1=$(lxc-info -p -n "$LXC" | awk '{print $2}')
+
+  # save modifications to key files back to the media bound base
+  # these are all to be found in /etc/pihole
+  SaveArr=(
+  adlists.list adlists.default black.list blacklist.txt local.list gravity.list
+  pihole-FTL.conf setupVars.conf whitelist.txt
+  )
+
+  # add wildcard lists which can be user dependent
+  # again these are all to be found in /etc/pihole
+  SaveArr+=( $(find /proc/$PID1/root/etc/pihole -type f -name 'list.*' -printf "%f\n") )
+
+  for i in "${SaveArr[@]}"; do
+    if [[ -f "$LXCPATH/delta0/etc/pihole/$i" ]]; then
+      cp -a "$LXCPATH/delta0/etc/pihole/$i" /tmp
+    fi
+  done
+
+  # other files worth saving go here
+  if [[ -f "$LXCPATH/etc/dnsmasq.d/01-pihole.conf" ]]; then
+    cp -a "$LXCPATH/etc/dnsmasq.d/01-pihole.conf" /tmp
+  fi
+
+  # copy the log on shutdown if non-0-byte
+  [[ -s "/proc/$PID1/root/run/log/pihole/pihole.log" ]] &&
+    cp -a "/proc/$PID1/root/run/log/pihole/pihole.log" /var/lib/lxc/pihole.log.save
+
+  # since pihole-FTL.service will write out the database when it quits we do
+  # that here before we distroy the snapshot
+
+  lxc-attach -n "$LXC" -- systemctl stop pihole-FTL
+
+  # now copy the freshly written database
+  if [[ -f "$LXCPATH/delta0/etc/pihole/pihole-FTL.db" ]]; then
+    cp -a "$LXCPATH/delta0/etc/pihole/pihole-FTL.db" /tmp
+  fi
+
+  lxc-destroy -n "$LXC" -f
+
+  for i in "${SaveArr[@]}"; do
+    if [[ -f /tmp/$i ]]; then
+      mv /tmp/$i "$BASEPATH/etc/pihole"
+    fi
+  done
+
+  if [[ -f /tmp/pihole-FTL.db ]]; then
+    mv /tmp/pihole-FTL.db "$BASEPATH/etc/pihole"
+  fi
+
+  if [[ -f /tmp/01-pihole.conf ]]; then
+    mv /tmp/01-pihole.conf "$BASEPATH/etc/dnsmasq.d"
+  fi
+
+  # if not mods to files exit cleanly for systemctl
+  exit 0
+}
+
+case "$1" in
+  u)
+    setupcheck || exit 1
+    # in case of an ungraceful shutdown, snapshot will be present so delete it
+    rm -rf /var/lib/lxc/"$LXC"
+    lxc-copy -n "$BASE" -N "$LXC" -M -s -B overlayfs || exit 1
+    config || exit 1
+    lxc-start -d -n "$LXC" || exit 1
+
+    # allow the container to come up and for dnsmasq to start up
+    # depending on the speed of the CPU, this can take a some time
+    if [[ -f /var/lib/lxc/pihole.log.save ]]; then
+      for i in {1..10}; do
+        sleep 1s
+        PID1=$(lxc-info -p -n "$LXC" | awk '{print $2}')
+        # did we get an integer?
+        if [[ "$PID1" =~ ^[0-9]+$ ]]; then
+          if [[ -f /proc/$PID1/root/run/log/pihole/pihole.log ]]; then
+            # depending on when the base container was stopped, the snapshot's
+            # /usr/lib/systemd/system/pi-hole-logtruncate.timer may think it's
+            # past due to rotate and do so immediately which would delete the
+            # log we seek to restore if we just cat it over when it appears...
+            # so we need to give it a brief delay to allow this to happen and
+            # then send over the old log data
+            #
+            # the restorelog function is backgrounded which does not slow
+            # startup of pihole-lss.service and restores the data even
+            # when logrotate runs on container startup... at worse, we lose a
+            # trivial amount of data in the delay built into restorelog
+            #
+            # finally, we need to delay the startup of pihole-FTL to avoid it
+            # core dumping when the log is modified after it started. this is
+            # a behavior that was introduced with v2.11 of pi-hole-ftl.
+            #
+            # if there is a more elegant way to accomplish this please send a PR
+            restorelog &
+            exit 0
+          fi
+        fi
+      done
+      echo "Could not restore old pihole.log"
+    fi
+    ;;
+  d)
+    setupcheck
+    stopit
+    ;;
+  *)
+    echo "$0 {u|d}"
+    exit 0
+esac
+
+# vim:set ts=2 sw=2 et:

@@ -1,0 +1,105 @@
+#!/bin/bash
+# openvpn-lss by graysky
+# version @VERSION@
+
+setupcheck() {
+  CONFIG=/etc/conf.d/openvpn-lss.conf
+
+  if [[ -f "$CONFIG" ]]; then
+    . "$CONFIG"
+  else
+    echo "$CONFIG not found so exiting!"
+    exit 1
+  fi
+
+  # setup global vars
+  LXCPREFIX="/var/lib/lxc"
+  BASEPATH="$LXCPREFIX/$BASE/rootfs"
+  LXCPATH="$LXCPREFIX/$LXC"
+
+  # make sure there is a config for the base lxc
+  [[ -f $LXCPREFIX/$BASE/config ]] || {
+    echo "Cannot locate the base LXC config file."
+  echo "Copy the template from /usr/share/lxc-service-snapshots and try again."
+  exit 1; }
+
+  # read in the MAC from the base lxc
+  BASELASTBLOCK=$(grep -o -i '[0-9A-F]\{2\}\(:[0-9A-F]\{2\}\)\{5\}' "$LXCPREFIX/$BASE/config" | awk -F: '{print $6}')
+
+  # TODO check that the user defined a valid MAC address in the base config
+
+  # make sure $LASTMACBLOCK is hexadecimal
+  if ! echo "$LASTMACBLOCK" | grep -o -i '[0-9A-F]\{2\}' &>/dev/null; then
+    echo "Bad value for LASTMACBLOCK so exiting: $LASTMACBLOCK"
+    exit 1
+  fi
+
+  # make sure there is an openvpn server config file in the base lxc
+  [[ -f "$BASEPATH/etc/openvpn/server/$VPNCFG1.conf" ]] || {
+    echo "Cannot locate $VPNCFG1 config file in the base container."
+  exit 1; }
+
+  # the 2nd one is optional
+  if [[ -n "$VPNCFG2" ]]; then
+    [[ -f "$BASEPATH/etc/openvpn/server/$VPNCFG2.conf" ]] || {
+      echo "Cannot locate $VPNCFG2 config file in the base container."
+    exit 1;}
+  fi
+}
+
+config() {
+  # change hwaddr on the base image for consistent dhcp behavior
+  sed -i -e "/^lxc.net.0.hwaddr/ s,$BASELASTBLOCK,$LASTMACBLOCK," "$LXCPATH/config"
+
+  # TODO add support for static ip addresses
+
+  # enable openvpn support
+  cat <<EOF >> "$LXCPATH/config"
+### for openvpn
+lxc.cgroup.devices.allow = c 10:200 rwm
+lxc.autodev = 1
+lxc.hook.autodev = /var/lib/lxc/$BASE/autodev
+lxc.pty.max = 1024
+EOF
+
+# remove mounts since the base image gets updated not the snapshot
+#sed -i -e '/^lxc.mount.entry/ s,lxc,#lxc,g' "$LXCPATH/config"
+sed -i -e '/^lxc.mount.entry/d' -i -e '/^## mount/d' "$LXCPATH/config"
+
+# enable services in delta0 space
+if [[ -n "$VPNCFG1" ]]; then
+  mkdir -p "$LXCPATH/delta0/etc/systemd/system/multi-user.target.wants"
+  ln -s /usr/lib/systemd/system/openvpn-server@.service \
+    "$LXCPATH/delta0/etc/systemd/system/multi-user.target.wants/openvpn-server@$VPNCFG1.service"
+fi
+
+if [[ -n "$VPNCFG2" ]]; then
+  mkdir -p "$LXCPATH/delta0/etc/systemd/system/multi-user.target.wants"
+  ln -s /usr/lib/systemd/system/openvpn-server@.service \
+    "$LXCPATH/delta0/etc/systemd/system/multi-user.target.wants/openvpn-server@$VPNCFG2.service"
+fi
+}
+
+stopit() {
+  lxc-destroy -n "$LXC" -f
+}
+
+case "$1" in
+  u)
+    setupcheck || exit 1
+    # in case of an ungraceful shutdown, snapshot will be present so delete it
+    rm -rf /var/lib/lxc/"$LXC"
+    lxc-copy -n "$BASE" -N "$LXC" -M -s -B overlayfs || exit 1
+    config || exit 1
+    lxc-start -d -n "$LXC" || exit 1
+    ;;
+  d)
+    setupcheck
+    stopit
+    ;;
+  *)
+    echo "$0 {u|d}"
+    exit 0
+esac
+
+# vim:set ts=2 sw=2 et:

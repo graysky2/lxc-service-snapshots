@@ -1,0 +1,13 @@
+[Unit]
+Description=Pi-hole LXC service snapshot
+After=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/lxc-service-snapshots/pihole u
+ExecStop=/usr/lib/lxc-service-snapshots/pihole d
+Delegate=yes
+
+[Install]
+WantedBy=multi-user.target

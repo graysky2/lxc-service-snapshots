@@ -1,0 +1,13 @@
+[Unit]
+Description=OpenVPN LXC service snapshot
+After=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/lxc-service-snapshots/openvpn u
+ExecStop=/usr/lib/lxc-service-snapshots/openvpn d
+Delegate=yes
+
+[Install]
+WantedBy=multi-user.target
