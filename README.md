@@ -16,7 +16,7 @@ Use this software if you wish to:
 
 ### Installation
 - To build from source, see the included INSTALL file.
-- ![logo](http://www.monitorix.org/imgs/archlinux.png "arch logo") Arch Linux users 
+- ![logo](http://www.monitorix.org/imgs/archlinux.png "arch logo") Arch Linux users can build from [this](https://aur.archlinux.org/packages/lxc-service-snapshots/) package in the [AUR](https://aur.archlinux.org/).
 
 ### Prerequisites
 A user configured "base" container containing the need dependencies for either OpenVPN, Pi-hole, or WireGuard.  This includes configuring, firewall setup, etc.  This setup is beyond the scope of this guide.  Refer to the following if needed:
