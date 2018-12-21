@@ -53,15 +53,16 @@ config() {
 }
 
 stopit() {
-  # define key files to save back to the media bound base all found in /etc/pihole
-  SaveArr=(
+  # define key files to save back to the media bound base image all found in /etc/pihole
+  # add wildcard block lists from /etc/pihole which change depending on the user
+  PID1=$(lxc-info -p -n "$LXC" | awk '{print $2}')
+  mapfile -t SaveArr < <(find /proc/"$PID1"/root/etc/pihole -type f -name 'list.*' -printf "%f\n")
+
+  # now add key files of a static nature
+  SaveArr+=(
   adlists.list adlists.default black.list blacklist.txt local.list gravity.list
   pihole-FTL.conf setupVars.conf whitelist.txt
   )
-
-  # add wildcard lists from /etc/pihole to the save array
-  PID1=$(lxc-info -p -n "$LXC" | awk '{print $2}')
-  SaveArr+=( $(find /proc/$PID1/root/etc/pihole -type f -name 'list.*' -printf "%f\n") )
 
   # copy these files to /tmp before destroying the container
   for i in "${SaveArr[@]}"; do
@@ -74,7 +75,7 @@ stopit() {
     cp -a "$LXCPATH/etc/dnsmasq.d/01-pihole.conf" /tmp
 
   # since pihole-FTL.service will write out the database when it quits we do
-  # that here before we distroy the snapshot
+  # that here before we destroy the snapshot
 
   lxc-attach -n "$LXC" -- systemctl stop pihole-FTL
 
@@ -86,7 +87,7 @@ stopit() {
 
   # copy back the files from /tmp to the base lxc on the media
   for i in "${SaveArr[@]}"; do
-		[[ -f /tmp/$i ]] && mv /tmp/$i "$BASEPATH/etc/pihole"
+		[[ -f /tmp/"$i" ]] && mv /tmp/"$i" "$BASEPATH/etc/pihole"
   done
 
   [[ -f /tmp/01-pihole.conf ]] &&
