@@ -1,6 +1,6 @@
 [Unit]
 Description=Pi-hole LXC service snapshot
-After=network.target
+After=network.target lxc-net.service
 
 [Service]
 Type=oneshot
