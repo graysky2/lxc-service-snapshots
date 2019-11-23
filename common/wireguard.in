@@ -34,17 +34,19 @@ setupcheck() {
     exit 1
   fi
 
-  # make sure there is an wireguard server config file in the base lxc
+  # make sure there is at least 1 wireguard server config file in the base lxc
   [[ -f "$BASEPATH/etc/wireguard/$WGCFG1.conf" ]] || {
     echo "Cannot locate $WGCFG1 config file in the base container."
   exit 1; }
 
-  # the 2nd one is optional
-  if [[ -n "$WGCFG2" ]]; then
-    [[ -f "$BASEPATH/etc/wireguard/$WGCFG2.conf" ]] || {
-      echo "Cannot locate $WGCFG2 config file in the base container."
-    exit 1;}
-  fi
+  # 2nd and 3rd are optional
+  for var in "$WGCFG2" "$WGCFG3"; do
+    if [[ -n "$var" ]]; then
+      [[ -f "$BASEPATH/etc/wireguard/$var.conf" ]] || {
+        echo "Cannot locate $var config file in the base container."
+      exit 1; }
+    fi
+  done
 }
 
 config() {
@@ -53,22 +55,18 @@ config() {
 
   # TODO add support for static ip addresses
 
-# remove mounts since the base image gets updated not the snapshot
-#sed -i -e '/^lxc.mount.entry/ s,lxc,#lxc,g' "$LXCPATH/config"
-sed -i -e '/^lxc.mount.entry/d' -i -e '/^## mount/d' "$LXCPATH/config"
+  # remove mounts since the base image gets updated not the snapshot
+  #sed -i -e '/^lxc.mount.entry/ s,lxc,#lxc,g' "$LXCPATH/config"
+  sed -i -e '/^lxc.mount.entry/d' -i -e '/^## mount/d' "$LXCPATH/config"
 
-# enable services in delta0 space
-if [[ -n "$WGCFG1" ]]; then
-  mkdir -p "$LXCPATH/delta0/etc/systemd/system/multi-user.target.wants"
-  ln -s /usr/lib/systemd/system/wg-quick@.service \
-    "$LXCPATH/delta0/etc/systemd/system/multi-user.target.wants/wg-quick@$WGCFG1.service"
-fi
-
-if [[ -n "$WGCFG2" ]]; then
-  mkdir -p "$LXCPATH/delta0/etc/systemd/system/multi-user.target.wants"
-  ln -s /usr/lib/systemd/system/wg-quick@.service \
-    "$LXCPATH/delta0/etc/systemd/system/multi-user.target.wants/wg-quick@$WGCFG2.service"
-fi
+  # enable services in delta0 space
+  for var in "$WGCFG1" "$WGCFG2" "$WGCFG3"; do
+    if [[ -n "$var" ]]; then
+      mkdir -p "$LXCPATH/delta0/etc/systemd/system/multi-user.target.wants"
+      ln -s /usr/lib/systemd/system/wg-quick@.service \
+        "$LXCPATH/delta0/etc/systemd/system/multi-user.target.wants/wg-quick@$var.service"
+    fi
+  done
 }
 
 stopit() {
