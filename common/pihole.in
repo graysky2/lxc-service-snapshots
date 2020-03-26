@@ -44,11 +44,11 @@ config() {
   # remove mounts since the base image gets updated not the snapshot
   sed -i -e '/^lxc.mount.entry/ s,lxc,#lxc,g' "$LXCPATH/config"
 
-  # enable services in delta0 space
-  mkdir -p "$LXCPATH/delta0/etc/systemd/system/multi-user.target.wants"
+  # enable services in delta space
+  mkdir -p "$LXCPATH/overlay/delta/etc/systemd/system/multi-user.target.wants"
   for UNIT in "${SERVICES[@]}"; do
     ln -s /usr/lib/systemd/system/"$UNIT".service \
-      "$LXCPATH/delta0/etc/systemd/system/multi-user.target.wants/$UNIT.service"
+      "$LXCPATH/overlay/delta/etc/systemd/system/multi-user.target.wants/$UNIT.service"
   done
 }
 
@@ -66,8 +66,8 @@ stopit() {
 
   # copy these files to /tmp before destroying the container
   for i in "${SaveArr[@]}"; do
-    [[ -f "$LXCPATH/delta0/etc/pihole/$i" ]] &&
-      cp -a "$LXCPATH/delta0/etc/pihole/$i" /tmp
+    [[ -f "$LXCPATH/overlay/delta/etc/pihole/$i" ]] &&
+      cp -a "$LXCPATH/overlay/delta/etc/pihole/$i" /tmp
   done
 
   # other files worth saving go here
@@ -80,8 +80,8 @@ stopit() {
   lxc-attach -n "$LXC" -- systemctl stop pihole-FTL
 
   # now copy the freshly written database
-  [[ -f "$LXCPATH/delta0/etc/pihole/pihole-FTL.db" ]] &&
-    cp -a "$LXCPATH/delta0/etc/pihole/pihole-FTL.db" /tmp
+  [[ -f "$LXCPATH/overlay/delta/etc/pihole/pihole-FTL.db" ]] &&
+    cp -a "$LXCPATH/overlay/delta/etc/pihole/pihole-FTL.db" /tmp
 
   lxc-destroy -n "$LXC" -f
 

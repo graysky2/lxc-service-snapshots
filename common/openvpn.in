@@ -62,22 +62,33 @@ lxc.hook.autodev = /var/lib/lxc/$BASE/autodev
 lxc.pty.max = 1024
 EOF
 
-# remove mounts since the base image gets updated not the snapshot
-#sed -i -e '/^lxc.mount.entry/ s,lxc,#lxc,g' "$LXCPATH/config"
-sed -i -e '/^lxc.mount.entry/d' -i -e '/^## mount/d' "$LXCPATH/config"
+  # remove mounts since the base image gets updated not the snapshot
+  #sed -i -e '/^lxc.mount.entry/ s,lxc,#lxc,g' "$LXCPATH/config"
+  sed -i -e '/^lxc.mount.entry/d' -i -e '/^## mount/d' "$LXCPATH/config"
 
-# enable services in delta0 space
-if [[ -n "$VPNCFG1" ]]; then
-  mkdir -p "$LXCPATH/delta0/etc/systemd/system/multi-user.target.wants"
-  ln -s /usr/lib/systemd/system/openvpn-server@.service \
-    "$LXCPATH/delta0/etc/systemd/system/multi-user.target.wants/openvpn-server@$VPNCFG1.service"
-fi
+  # enable services in delta space
+  if [[ -n "$VPNCFG1" ]]; then
+    mkdir -p "$LXCPATH/overlay/delta/etc/systemd/system/multi-user.target.wants"
+    ln -s /usr/lib/systemd/system/openvpn-server@.service \
+      "$LXCPATH/overlay/delta/etc/systemd/system/multi-user.target.wants/openvpn-server@$VPNCFG1.service"
+  fi
 
-if [[ -n "$VPNCFG2" ]]; then
-  mkdir -p "$LXCPATH/delta0/etc/systemd/system/multi-user.target.wants"
-  ln -s /usr/lib/systemd/system/openvpn-server@.service \
-    "$LXCPATH/delta0/etc/systemd/system/multi-user.target.wants/openvpn-server@$VPNCFG2.service"
-fi
+  if [[ -n "$VPNCFG2" ]]; then
+    mkdir -p "$LXCPATH/overlay/delta/etc/systemd/system/multi-user.target.wants"
+    ln -s /usr/lib/systemd/system/openvpn-server@.service \
+      "$LXCPATH/overlay/delta/etc/systemd/system/multi-user.target.wants/openvpn-server@$VPNCFG2.service"
+  fi
+
+  # assume the base image has pi-hole-server and pi-hole-FTL installed
+  # and since pi-hole-server ships with timers enabled, let's mask them since
+  # openvpn doesn't give a fuck about them
+  for timer in pi-hole-gravity pi-hole-logtruncate; do
+    ln -s /dev/null \
+      "$LXCPATH/overlay/delta/etc/systemd/system/$timer.timer"
+  done
+
+  ln -s /dev/null \
+    "$LXCPATH/overlay/delta/etc/systemd/system/multi-user.target.wants/pihole-FTL.service"
 }
 
 stopit() {

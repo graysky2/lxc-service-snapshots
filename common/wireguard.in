@@ -59,14 +59,25 @@ config() {
   #sed -i -e '/^lxc.mount.entry/ s,lxc,#lxc,g' "$LXCPATH/config"
   sed -i -e '/^lxc.mount.entry/d' -i -e '/^## mount/d' "$LXCPATH/config"
 
-  # enable services in delta0 space
+  # enable services in delta space
   for var in "$WGCFG1" "$WGCFG2" "$WGCFG3"; do
     if [[ -n "$var" ]]; then
-      mkdir -p "$LXCPATH/delta0/etc/systemd/system/multi-user.target.wants"
+      mkdir -p "$LXCPATH/overlay/delta/etc/systemd/system/multi-user.target.wants"
       ln -s /usr/lib/systemd/system/wg-quick@.service \
-        "$LXCPATH/delta0/etc/systemd/system/multi-user.target.wants/wg-quick@$var.service"
+        "$LXCPATH/overlay/delta/etc/systemd/system/multi-user.target.wants/wg-quick@$var.service"
     fi
   done
+  
+  # assume the base image has pi-hole-server and pi-hole-FTL installed
+  # and since pi-hole-server ships with timers enabled, let's mask them since
+  # wireguard doesn't give a fuck about them
+  for timer in pi-hole-gravity pi-hole-logtruncate; do
+    ln -s /dev/null \
+      "$LXCPATH/overlay/delta/etc/systemd/system/$timer.timer"
+  done
+
+  ln -s /dev/null \
+    "$LXCPATH/overlay/delta/etc/systemd/system/multi-user.target.wants/pihole-FTL.service"
 }
 
 stopit() {
