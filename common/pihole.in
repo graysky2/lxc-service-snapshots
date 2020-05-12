@@ -58,10 +58,10 @@ stopit() {
   PID1=$(lxc-info -p -n "$LXC" | awk '{print $2}')
   mapfile -t SaveArr < <(find /proc/"$PID1"/root/etc/pihole -type f -name 'list.*' -printf "%f\n")
 
-  # now add key files of a static nature
+  # now add key files of a static nature for pihole v5+
   SaveArr+=(
-  adlists.list adlists.default black.list blacklist.txt local.list gravity.list
-  pihole-FTL.conf setupVars.conf whitelist.txt
+  dhcp.leases dns-servers.conf gravity.db local.list logrotate
+  macvendor.db pihole-FTL.conf pihole-FTL.db setupVars.conf
   )
 
   # copy these files to /tmp before destroying the container
