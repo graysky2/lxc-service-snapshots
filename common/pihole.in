@@ -59,9 +59,11 @@ stopit() {
   mapfile -t SaveArr < <(find /proc/"$PID1"/root/etc/pihole -type f -name 'list.*' -printf "%f\n")
 
   # now add key files of a static nature for pihole v5+
+  # excluding pihole-FTL.db since it is handled below
   SaveArr+=(
-  dhcp.leases dns-servers.conf gravity.db local.list logrotate
-  macvendor.db pihole-FTL.conf pihole-FTL.db setupVars.conf
+  dns-servers.conf pihole-FTL.conf setupVars.conf
+  gravity.db macvendor.db
+  dhcp.leases local.list logrotate
   )
 
   # copy these files to /tmp before destroying the container
