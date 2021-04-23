@@ -16,6 +16,7 @@ setupcheck() {
   LXCPREFIX="/var/lib/lxc"
   BASEPATH="$LXCPREFIX/$BASE/rootfs"
   LXCPATH="$LXCPREFIX/$LXC"
+  DELTAPATH="$LXCPATH/overlay/delta"
 
   # make sure there is a config for the base lxc
   [[ -f $LXCPREFIX/$BASE/config ]] || {
@@ -45,10 +46,10 @@ config() {
   sed -i -e '/^lxc.mount.entry/ s,lxc,#lxc,g' "$LXCPATH/config"
 
   # enable services in delta space
-  mkdir -p "$LXCPATH/overlay/delta/etc/systemd/system/multi-user.target.wants"
+  mkdir -p "$DELTAPATH/etc/systemd/system/multi-user.target.wants"
   for UNIT in "${SERVICES[@]}"; do
     ln -s /usr/lib/systemd/system/"$UNIT".service \
-      "$LXCPATH/overlay/delta/etc/systemd/system/multi-user.target.wants/$UNIT.service"
+      "$DELTAPATH/etc/systemd/system/multi-user.target.wants/$UNIT.service"
   done
 }
 
@@ -68,13 +69,13 @@ stopit() {
 
   # copy these files to /tmp before destroying the container
   for i in "${SaveArr[@]}"; do
-    [[ -f "$LXCPATH/overlay/delta/etc/pihole/$i" ]] &&
-      cp -a "$LXCPATH/overlay/delta/etc/pihole/$i" /tmp
+    [[ -f "$DELTAPATH/etc/pihole/$i" ]] &&
+      cp -a "$DELTAPATH/etc/pihole/$i" /tmp
   done
 
   # other files worth saving go here
-  [[ -f "$LXCPATH/etc/dnsmasq.d/01-pihole.conf" ]] &&
-    cp -a "$LXCPATH/etc/dnsmasq.d/01-pihole.conf" /tmp
+  [[ -f "$DELTAPATH/etc/dnsmasq.d/01-pihole.conf" ]] &&
+    cp -a "$DELTAPATH/etc/dnsmasq.d/01-pihole.conf" /tmp
 
   # since pihole-FTL.service will write out the database when it quits we do
   # that here before we destroy the snapshot
@@ -82,8 +83,8 @@ stopit() {
   lxc-attach -n "$LXC" -- systemctl stop pihole-FTL
 
   # now copy the freshly written database
-  [[ -f "$LXCPATH/overlay/delta/etc/pihole/pihole-FTL.db" ]] &&
-    cp -a "$LXCPATH/overlay/delta/etc/pihole/pihole-FTL.db" /tmp
+  [[ -f "$DELTAPATH/etc/pihole/pihole-FTL.db" ]] &&
+    cp -a "$DELTAPATH/etc/pihole/pihole-FTL.db" /tmp
 
   lxc-destroy -n "$LXC" -f
 

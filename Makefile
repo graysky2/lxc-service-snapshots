@@ -1,4 +1,4 @@
-VERSION = 2.17
+VERSION = 2.18
 PN = lxc-service-snapshots
 
 PREFIX ?= /usr
