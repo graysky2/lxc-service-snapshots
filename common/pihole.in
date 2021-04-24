@@ -82,9 +82,9 @@ stopit() {
 
   lxc-attach -n "$LXC" -- systemctl stop pihole-FTL
 
-  # now copy the freshly written database
-  [[ -f "$DELTAPATH/etc/pihole/pihole-FTL.db" ]] &&
-    cp -a "$DELTAPATH/etc/pihole/pihole-FTL.db" /tmp
+  # copy pihole*.db out which covers more than just the expected pihole-FTL.db
+  # in case the user rotated a copy as a backup and kept it in that dir
+  cp -a "$DELTAPATH/etc/pihole/pihole*.db" /tmp
 
   lxc-destroy -n "$LXC" -f
 
@@ -95,9 +95,8 @@ stopit() {
 
   [[ -f /tmp/01-pihole.conf ]] &&
     mv /tmp/01-pihole.conf "$BASEPATH/etc/dnsmasq.d"
-	
-	[[ -f /tmp/pihole-FTL.db ]] &&
-    mv /tmp/pihole-FTL.db "$BASEPATH/etc/pihole"
+
+  mv -f /tmp/pihole*.db "$BASEPATH/etc/pihole"
 }
 
 case "$1" in
